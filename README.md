@@ -1,6 +1,6 @@
 # 🎫 Event Ticket Booking Platform
 
-A distributed, cloud-native event ticketing system designed for high-concurrency flash-sale scenarios — from event creation and discovery through seat selection, payment, and digital ticket delivery.
+A distributed, self-hosted event ticketing system built on Kubernetes and open-source technologies, designed for high-concurrency flash-sale scenarios — from event creation and discovery through seat selection, payment, and digital ticket delivery.
 
 ## 🏗️ Architecture Overview
 
@@ -8,7 +8,7 @@ The platform follows a **microservices architecture** built on Kubernetes with:
 
 - **API Gateway** (Kong) — rate limiting, auth, routing
 - **Event-Driven Communication** — Apache Kafka for async messaging
-- **Polyglot Persistence** — PostgreSQL, Redis, Elasticsearch, S3, ClickHouse
+- **Polyglot Persistence** — PostgreSQL, Redis, Elasticsearch, MinIO, ClickHouse
 - **CQRS + Event Sourcing** — separate read/write models for inventory and search
 
 ## 🧩 Core Services
@@ -36,7 +36,7 @@ The platform follows a **microservices architecture** built on Kubernetes with:
 
 ## 📐 Design Documentation
 
-See [DESIGN.md](./DESIGN.md) for the full system design including:
+See [DESIGN.md](./docs/DESIGN.md) for the full system design including:
 
 - High-level architecture diagrams
 - Data model (ER diagram)
@@ -51,20 +51,24 @@ See [DESIGN.md](./DESIGN.md) for the full system design including:
 
 ## 🛠️ Tech Stack
 
-| Layer          | Technology                           |
-| -------------- | ------------------------------------ |
-| Frontend       | React 19 + Next.js 15                |
-| Mobile         | React Native / Flutter               |
-| API Gateway    | Kong / AWS API Gateway               |
-| Backend        | Go, Python, Node.js, Java            |
-| Database       | PostgreSQL 17                        |
-| Cache          | Redis 7 Cluster                      |
-| Message Broker | Apache Kafka 3.7                     |
-| Search         | Elasticsearch 8.x                    |
-| Cloud          | AWS (EKS, RDS, ElastiCache, MSK, S3) |
-| IaC            | Terraform + Helm                     |
-| CI/CD          | GitHub Actions                       |
-| Monitoring     | Prometheus + Grafana                 |
+| Layer          | Technology                 |
+| -------------- | -------------------------- |
+| Frontend       | React 19 + Next.js 15      |
+| Mobile         | React Native / Flutter     |
+| API Gateway    | Kong (OSS)                 |
+| Backend        | Go, Python, Node.js, Java  |
+| Database       | PostgreSQL 17 (Patroni HA) |
+| Cache          | Redis 7 Cluster            |
+| Message Broker | Apache Kafka 3.7 (KRaft)   |
+| Search         | Elasticsearch 8.x (ECK)    |
+| Object Storage | MinIO                      |
+| Orchestration  | Kubernetes (kubeadm / k3s) |
+| Registry       | Harbor                     |
+| Secrets        | HashiCorp Vault            |
+| IaC            | Terraform + Helm           |
+| CI/CD          | GitHub Actions             |
+| Monitoring     | Prometheus + Grafana       |
+| Ingress / CDN  | Nginx Ingress + Varnish    |
 
 ## 📄 License
 

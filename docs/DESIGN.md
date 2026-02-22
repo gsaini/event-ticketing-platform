@@ -44,7 +44,7 @@ The **Event Ticket Booking Platform** is a distributed, cloud-native system desi
 | Low latency          | < 200 ms P95 for search, < 500 ms P95 for booking |
 | Flash-sale readiness | Sustain 50K+ concurrent booking attempts          |
 | Fraud prevention     | < 0.1% fraudulent transactions                    |
-| Global reach         | Multi-region deployment with CDN                  |
+| Global reach         | Multi-region deployment with reverse proxy CDN    |
 
 ---
 
@@ -98,7 +98,7 @@ The **Event Ticket Booking Platform** is a distributed, cloud-native system desi
 | Category          | Requirement                                                               |
 | ----------------- | ------------------------------------------------------------------------- |
 | **Scalability**   | Horizontal auto-scaling; handle 10x traffic spikes during on-sales        |
-| **Availability**  | 99.95% uptime; multi-AZ deployment with automated failover                |
+| **Availability**  | 99.95% uptime; multi-node deployment with automated failover              |
 | **Latency**       | P95 < 200 ms for reads, P95 < 500 ms for writes                           |
 | **Consistency**   | Strong consistency for seat inventory; eventual consistency for analytics |
 | **Durability**    | Zero ticket data loss; RPO < 1 min                                        |
@@ -125,15 +125,15 @@ The system follows a **microservices architecture** with an API Gateway front-do
 └──────────────────────────────┼──────────────────────────────────────────────────┘
                                │
                         ┌──────┴──────┐
-                        │    CDN      │
-                        │(CloudFront) │
+                        │    CDN /    │
+                        │  Nginx      │
                         └──────┬──────┘
                                │
 ┌──────────────────────────────┼──────────────────────────────────────────────────┐
 │                       GATEWAY LAYER                                             │
 │                 ┌────────────┴────────────┐                                     │
 │                 │      API Gateway        │                                     │
-│                 │  (Kong / AWS API GW)    │                                     │
+│                 │  (Kong / Traefik)       │                                     │
 │                 │  • Rate Limiting        │                                     │
 │                 │  • Auth (JWT)           │                                     │
 │                 │  • Request Routing      │                                     │
@@ -160,7 +160,7 @@ The system follows a **microservices architecture** with an API Gateway front-do
 ┌─────────────────────────────┼─────────┼─────────────────────────────────────────┐
 │                   MESSAGING LAYER                                               │
 │              ┌──────────────┴─────────┴──────────────┐                          │
-│              │        Apache Kafka / AWS SNS+SQS     │                          │
+│              │           Apache Kafka (KRaft)        │                          │
 │              │  Topics: booking.*, payment.*, event.* │                          │
 │              └───────────────────────────────────────┘                          │
 └─────────────────────────────────────────────────────────────────────────────────┘
@@ -168,9 +168,9 @@ The system follows a **microservices architecture** with an API Gateway front-do
 ┌─────────────────────────────┼───────────────────────────────────────────────────┐
 │                    DATA LAYER                                                   │
 │  ┌───────────┐  ┌───────────┐  ┌─────────────┐  ┌───────────┐  ┌────────────┐  │
-│  │PostgreSQL │  │ Redis     │  │Elasticsearch│  │ S3 / Blob │  │ DynamoDB / │  │
-│  │(Primary   │  │ (Cache &  │  │(Search &    │  │ (Media &  │  │ Cassandra  │  │
-│  │ OLTP)     │  │  Locks)   │  │ Discovery)  │  │  Tickets) │  │ (Analytics)│  │
+│  │PostgreSQL │  │ Redis     │  │Elasticsearch│  │ MinIO     │  │ ClickHouse │  │
+│  │(Primary   │  │ (Cache &  │  │(Search &    │  │ (Media &  │  │ (Analytics)│  │
+│  │ OLTP)     │  │  Locks)   │  │ Discovery)  │  │  Tickets) │  │            │  │
 │  └───────────┘  └───────────┘  └─────────────┘  └───────────┘  └────────────┘  │
 │                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
@@ -204,7 +204,7 @@ The system follows a **microservices architecture** with an API Gateway front-do
 | Attribute          | Detail                                                                                     |
 | ------------------ | ------------------------------------------------------------------------------------------ |
 | **Responsibility** | Event CRUD, venue management, seating chart configuration, pricing tiers                   |
-| **Tech Stack**     | Python / FastAPI, PostgreSQL, S3 (media assets)                                            |
+| **Tech Stack**     | Python / FastAPI, PostgreSQL, MinIO (media assets)                                         |
 | **Key Endpoints**  | `POST /events`, `GET /events/{id}`, `PUT /events/{id}`, `POST /events/{id}/publish`        |
 | **Caching**        | Event details cached in Redis (TTL 5 min); cache-aside pattern with invalidation on update |
 
@@ -241,17 +241,17 @@ The system follows a **microservices architecture** with an API Gateway front-do
 | Attribute           | Detail                                                                       |
 | ------------------- | ---------------------------------------------------------------------------- |
 | **Responsibility**  | Email, SMS, push notification delivery                                       |
-| **Tech Stack**      | Node.js, SES (email), Twilio (SMS), FCM/APNs (push)                          |
+| **Tech Stack**      | Node.js, Postal/Mailhog (email), Twilio (SMS), FCM/APNs (push)               |
 | **Trigger**         | Event-driven via Kafka topics (`booking.confirmed`, `payment.success`, etc.) |
-| **Template Engine** | Handlebars templates stored in S3                                            |
+| **Template Engine** | Handlebars templates stored in MinIO                                         |
 
 ### 5.7 Analytics Service
 
-| Attribute          | Detail                                                         |
-| ------------------ | -------------------------------------------------------------- |
-| **Responsibility** | Real-time dashboards, sales reporting, trend analysis          |
-| **Tech Stack**     | Python, ClickHouse / DynamoDB for OLAP, Apache Superset for BI |
-| **Data Pipeline**  | Kafka → Flink/Spark Streaming → ClickHouse                     |
+| Attribute          | Detail                                                |
+| ------------------ | ----------------------------------------------------- |
+| **Responsibility** | Real-time dashboards, sales reporting, trend analysis |
+| **Tech Stack**     | Python, ClickHouse for OLAP, Apache Superset for BI   |
+| **Data Pipeline**  | Kafka → Flink/Spark Streaming → ClickHouse            |
 
 ### 5.8 Cart Service
 
@@ -770,7 +770,7 @@ flowchart LR
     K[Kafka Topics] --> NC[Notification Consumer]
     NC --> TE[Template Engine]
     TE --> Router{Channel Router}
-    Router -->|Email| SES[AWS SES]
+    Router -->|Email| SES[Postal SMTP]
     Router -->|SMS| TW[Twilio]
     Router -->|Push| FCM[Firebase Cloud Messaging]
     Router -->|In-App| WS[WebSocket Server]
@@ -871,7 +871,7 @@ roles:
 Client (Browser/App)
   │  HTTP Cache-Control headers
   ▼
-CDN (CloudFront)
+CDN (Nginx / Varnish)
   │  Static assets, event images (TTL 24h)
   ▼
 API Gateway
@@ -903,48 +903,49 @@ Database (PostgreSQL)
 
 ## 15. Infrastructure & Deployment
 
-### 15.1 Cloud Architecture (AWS)
+### 15.1 Kubernetes Architecture (Self-Hosted / On-Prem)
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                         AWS Account                          │
+│                    Kubernetes Cluster                         │
 │                                                              │
 │  ┌──────────┐     ┌────────────────────────────────────┐     │
-│  │ Route 53 │────►│ CloudFront (CDN)                   │     │
+│  │ CoreDNS  │────►│ Nginx Ingress Controller           │     │
 │  └──────────┘     └──────────┬─────────────────────────┘     │
 │                              │                               │
 │  ┌───────────────────────────┼────────────────────────────┐  │
-│  │               VPC (10.0.0.0/16)                        │  │
+│  │             Ingress Namespace                          │  │
 │  │                           │                            │  │
 │  │  ┌───────────┐    ┌──────┴──────┐                      │  │
-│  │  │ WAF       │───►│    ALB      │                      │  │
+│  │  │ ModSec    │───►│ Nginx LB    │                      │  │
+│  │  │ (WAF)     │    │             │                      │  │
 │  │  └───────────┘    └──────┬──────┘                      │  │
 │  │                          │                             │  │
-│  │  ┌───── Public Subnets ──┴────────────────────────┐    │  │
-│  │  │  NAT Gateway    │    API Gateway (Kong)        │    │  │
+│  │  ┌───── Gateway Namespace┴────────────────────────┐    │  │
+│  │  │  Cert-Manager    │    API Gateway (Kong)        │    │  │
 │  │  └─────────────────┼─────────────────────────────┘    │  │
-│  │                     │                                  │  │
-│  │  ┌── Private Subnets ┴───────────────────────────┐    │  │
-│  │  │                                                │    │  │
-│  │  │  ┌──────────────────────────────────────────┐  │    │  │
-│  │  │  │        EKS Cluster (Kubernetes)          │  │    │  │
-│  │  │  │                                          │  │    │  │
-│  │  │  │  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐       │  │    │  │
-│  │  │  │  │User │ │Event│ │Book │ │Pay  │ ...    │  │    │  │
-│  │  │  │  │Svc  │ │Svc  │ │Svc  │ │Svc  │       │  │    │  │
-│  │  │  │  └─────┘ └─────┘ └─────┘ └─────┘       │  │    │  │
-│  │  │  └──────────────────────────────────────────┘  │    │  │
-│  │  │                                                │    │  │
-│  │  │  ┌──────┐ ┌──────┐ ┌──────┐ ┌─────────────┐  │    │  │
-│  │  │  │RDS   │ │Redis │ │MSK   │ │Elasticsearch│  │    │  │
-│  │  │  │(PG)  │ │Cluster│ │(Kafka│ │(OpenSearch) │  │    │  │
-│  │  │  └──────┘ └──────┘ └──────┘ └─────────────┘  │    │  │
-│  │  └────────────────────────────────────────────────┘    │  │
-│  └────────────────────────────────────────────────────────┘  │
+│  └───────────────────────────────────────────────────────┘  │
+│                     │                                        │
+│  ┌── Application Namespaces ┴───────────────────────────┐   │
+│  │                                                       │   │
+│  │  ┌──────────────────────────────────────────┐         │   │
+│  │  │         Application Pods                 │         │   │
+│  │  │                                          │         │   │
+│  │  │  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐       │         │   │
+│  │  │  │User │ │Event│ │Book │ │Pay  │ ...    │         │   │
+│  │  │  │Svc  │ │Svc  │ │Svc  │ │Svc  │       │         │   │
+│  │  │  └─────┘ └─────┘ └─────┘ └─────┘       │         │   │
+│  │  └──────────────────────────────────────────┘         │   │
+│  │                                                       │   │
+│  │  ┌──────┐ ┌──────┐ ┌──────┐ ┌─────────────┐          │   │
+│  │  │PG    │ │Redis │ │Kafka │ │Elasticsearch│          │   │
+│  │  │(Oper)│ │(Oper)│ │(Stri)│ │(ECK Oper.)  │          │   │
+│  │  └──────┘ └──────┘ └──────┘ └─────────────┘          │   │
+│  └───────────────────────────────────────────────────────┘   │
 │                                                              │
 │  ┌───────────┐  ┌───────────┐  ┌───────────┐                │
-│  │ S3        │  │ ECR       │  │ Secrets   │                │
-│  │ (Assets)  │  │ (Images)  │  │ Manager   │                │
+│  │ MinIO     │  │ Harbor    │  │ Vault     │                │
+│  │ (Storage) │  │ (Registry)│  │ (Secrets) │                │
 │  └───────────┘  └───────────┘  └───────────┘                │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -957,12 +958,12 @@ flowchart LR
     GH -->|webhook| CI[GitHub Actions]
     CI --> Lint[Lint + Format]
     CI --> Test[Unit + Integration Tests]
-    CI --> SAST[Security Scan - Snyk]
+    CI --> SAST[Security Scan - Trivy]
     Lint --> Build[Docker Build]
     Test --> Build
     SAST --> Build
-    Build --> Push[Push to ECR]
-    Push --> DeployStg[Deploy to Staging - EKS]
+    Build --> Push[Push to Harbor]
+    Push --> DeployStg[Deploy to Staging - K8s]
     DeployStg --> E2E[E2E Tests - Playwright]
     E2E -->|pass| DeployProd[Deploy to Production]
     DeployProd --> Canary[Canary 5% traffic]
@@ -1090,7 +1091,7 @@ spec:
 | Passwords          | PostgreSQL       | bcrypt (at rest)                 | Account lifetime         |
 | PII (email, phone) | PostgreSQL       | AES-256 (field-level)            | GDPR: deleted on request |
 | Payment tokens     | Payment provider | Never stored locally             | N/A                      |
-| QR codes           | S3               | AES-256 (at rest)                | 30 days post-event       |
+| QR codes           | MinIO            | AES-256 (at rest)                | 30 days post-event       |
 | Logs               | OpenSearch       | TLS in transit, encrypted volume | 90 days                  |
 | Analytics          | ClickHouse       | Volume encryption                | 2 years                  |
 
@@ -1167,11 +1168,11 @@ flowchart TD
 | ------------------------------ | ----------------------- | --------------------------------------------------- | -------- |
 | **Booking Service crash**      | Can't create bookings   | K8s auto-restart; 3 replicas min; circuit breaker   | < 30s    |
 | **Redis down**                 | No seat locks, no cache | Redis Sentinel failover; degrade to DB-only locking | < 60s    |
-| **PostgreSQL primary failure** | No writes               | RDS Multi-AZ auto-failover                          | < 120s   |
+| **PostgreSQL primary failure** | No writes               | Patroni auto-failover with etcd                     | < 120s   |
 | **Kafka broker failure**       | Event lag               | Multi-broker cluster; ISR replication factor = 3    | < 60s    |
 | **Payment provider outage**    | Can't process payments  | Fallback to secondary provider (Razorpay ↔ Stripe)  | < 10s    |
 | **Elasticsearch down**         | Search unavailable      | Fallback to PostgreSQL full-text search (degraded)  | < 30s    |
-| **Full region failure**        | All services down       | Multi-region active-passive; DNS failover           | < 15 min |
+| **Full cluster failure**       | All services down       | Multi-cluster active-passive; DNS failover          | < 15 min |
 
 ### 19.2 Resilience Patterns
 
@@ -1223,22 +1224,25 @@ flowchart TD
 | --------------------------- | ------------------------------ | ------------------------------------------------ |
 | **Frontend Web**            | React 19 + Next.js 15          | SSR for SEO, RSC for performance                 |
 | **Mobile**                  | React Native / Flutter         | Cross-platform with native feel                  |
-| **API Gateway**             | Kong / AWS API Gateway         | Rate limiting, auth, routing                     |
+| **API Gateway**             | Kong (OSS)                     | Rate limiting, auth, routing                     |
 | **Booking Service**         | Go 1.22                        | High concurrency, low memory footprint           |
 | **Event / User Services**   | Python FastAPI / Node.js       | Rapid development, rich ecosystem                |
 | **Payment Service**         | Java 21 + Spring Boot          | Enterprise reliability, mature Stripe SDK        |
-| **Primary Database**        | PostgreSQL 17                  | ACID, JSONB, full-text search fallback           |
+| **Primary Database**        | PostgreSQL 17 (Patroni)        | ACID, JSONB, HA via Patroni + etcd               |
 | **Cache / Locks**           | Redis 7 Cluster                | Sub-ms latency, Lua scripting, distributed locks |
-| **Message Broker**          | Apache Kafka 3.7               | Ordered, durable event streaming                 |
-| **Search Engine**           | Elasticsearch 8.x / OpenSearch | Full-text, geo, faceted search                   |
-| **Object Storage**          | AWS S3                         | Media, tickets, templates                        |
+| **Message Broker**          | Apache Kafka 3.7 (KRaft)       | Ordered, durable event streaming (no ZooKeeper)  |
+| **Search Engine**           | Elasticsearch 8.x (ECK)        | Full-text, geo, faceted search                   |
+| **Object Storage**          | MinIO                          | S3-compatible, self-hosted object storage        |
 | **Analytics**               | ClickHouse + Apache Superset   | Columnar OLAP + interactive BI                   |
-| **Container Orchestration** | Kubernetes (EKS)               | Auto-scaling, self-healing, declarative          |
-| **CI/CD**                   | GitHub Actions                 | Native GitHub integration                        |
+| **Container Orchestration** | Kubernetes (kubeadm / k3s)     | Auto-scaling, self-healing, declarative          |
+| **CI/CD**                   | GitHub Actions / Gitea Actions | Native Git integration                           |
 | **IaC**                     | Terraform + Helm               | Reproducible infrastructure                      |
+| **Container Registry**      | Harbor                         | Self-hosted, vulnerability scanning              |
+| **Secrets Management**      | HashiCorp Vault                | Dynamic secrets, encryption as a service         |
 | **Monitoring**              | Prometheus + Grafana           | Metrics + dashboards                             |
 | **Logging**                 | Fluent Bit + OpenSearch        | Structured log aggregation                       |
 | **Tracing**                 | OpenTelemetry + Jaeger         | Distributed request tracing                      |
+| **Ingress / CDN**           | Nginx Ingress + Varnish        | TLS termination, static asset caching            |
 
 ---
 
