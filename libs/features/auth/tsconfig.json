@@ -1,0 +1,16 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "jsx": "react-jsx",
+    "outDir": "../../../dist/libs/features/auth",
+    "declaration": true
+  },
+  "include": ["src/**/*"],
+  "references": [
+    { "path": "../../ui" },
+    { "path": "../../data-access" },
+    { "path": "../../shared/types" },
+    { "path": "../../shared/utils" }
+  ]
+}

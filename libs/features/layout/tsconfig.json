@@ -1,0 +1,15 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "jsx": "react-jsx",
+    "outDir": "../../../dist/libs/features/layout",
+    "declaration": true
+  },
+  "include": ["src/**/*"],
+  "references": [
+    { "path": "../../ui" },
+    { "path": "../../data-access" },
+    { "path": "../../shared/utils" }
+  ]
+}

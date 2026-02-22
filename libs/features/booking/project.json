@@ -1,0 +1,7 @@
+{
+  "name": "feature-booking",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/features/booking/src",
+  "projectType": "library",
+  "tags": ["type:feature", "scope:booking"]
+}

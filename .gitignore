@@ -41,3 +41,10 @@ docker-compose.override.yml
 *.pem
 *.key
 secrets/
+
+# Nx
+.nx/
+.nx/cache/
+.nx/workspace-data/
+nx-cloud.env
+

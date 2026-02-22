@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "jsx": "react-jsx",
+    "outDir": "../../dist/libs/data-access",
+    "declaration": true
+  },
+  "include": ["src/**/*"],
+  "references": [
+    { "path": "../shared/types" }
+  ]
+}

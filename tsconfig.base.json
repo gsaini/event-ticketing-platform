@@ -1,0 +1,41 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "rootDir": ".",
+    "sourceMap": true,
+    "declaration": false,
+    "moduleResolution": "bundler",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@ticketing/types": ["libs/shared/types/src/index.ts"],
+      "@ticketing/utils": ["libs/shared/utils/src/index.ts"],
+      "@ticketing/ui": ["libs/ui/src/index.ts"],
+      "@ticketing/data-access": ["libs/data-access/src/index.ts"],
+      "@ticketing/feature-auth": ["libs/features/auth/src/index.ts"],
+      "@ticketing/feature-events": ["libs/features/events/src/index.ts"],
+      "@ticketing/feature-booking": ["libs/features/booking/src/index.ts"],
+      "@ticketing/feature-cart": ["libs/features/cart/src/index.ts"],
+      "@ticketing/feature-checkout": ["libs/features/checkout/src/index.ts"],
+      "@ticketing/feature-organizer": ["libs/features/organizer/src/index.ts"],
+      "@ticketing/feature-admin": ["libs/features/admin/src/index.ts"],
+      "@ticketing/feature-layout": ["libs/features/layout/src/index.ts"]
+    }
+  },
+  "exclude": ["node_modules", "tmp"]
+}
