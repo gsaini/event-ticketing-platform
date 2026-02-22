@@ -1,0 +1,97 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["events"]
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  binaryTargets   = ["native", "debian-openssl-3.0.x"]
+  previewFeatures = ["multiSchema"]
+}
+
+model Venue {
+  id            String    @id @default(uuid()) @db.Uuid
+  name          String    @db.VarChar(255)
+  address       String
+  city          String    @db.VarChar(100)
+  country       String    @db.VarChar(100)
+  latitude      Float?
+  longitude     Float?
+  totalCapacity Int       @map("total_capacity")
+  seatingChart  Json?     @map("seating_chart")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  sections      Section[]
+  events        Event[]
+
+  @@map("venues")
+  @@schema("events")
+}
+
+model Section {
+  id          String   @id @default(uuid()) @db.Uuid
+  venueId     String   @map("venue_id") @db.Uuid
+  name        String   @db.VarChar(100)
+  capacity    Int
+  sectionType String   @default("seated") @map("section_type") @db.VarChar(20)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  venue       Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  seats       Seat[]
+
+  @@map("sections")
+  @@schema("events")
+}
+
+model Seat {
+  id           String   @id @default(uuid()) @db.Uuid
+  sectionId    String   @map("section_id") @db.Uuid
+  rowLabel     String   @map("row_label") @db.VarChar(10)
+  seatNumber   Int      @map("seat_number")
+  isAccessible Boolean  @default(false) @map("is_accessible")
+  coordinates  Json?
+  section      Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@unique([sectionId, rowLabel, seatNumber])
+  @@map("seats")
+  @@schema("events")
+}
+
+model Event {
+  id           String       @id @default(uuid()) @db.Uuid
+  organizerId  String       @map("organizer_id") @db.Uuid
+  venueId      String?      @map("venue_id") @db.Uuid
+  title        String       @db.VarChar(255)
+  description  String?
+  genre        String?      @db.VarChar(50)
+  imageUrl     String?      @map("image_url")
+  startTime    DateTime     @map("start_time") @db.Timestamptz()
+  endTime      DateTime     @map("end_time") @db.Timestamptz()
+  status       String       @default("draft") @db.VarChar(20)
+  metadata     Json         @default("{}")
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz()
+  venue        Venue?       @relation(fields: [venueId], references: [id])
+  ticketTiers  TicketTier[]
+
+  @@map("events")
+  @@schema("events")
+}
+
+model TicketTier {
+  id            String    @id @default(uuid()) @db.Uuid
+  eventId       String    @map("event_id") @db.Uuid
+  name          String    @db.VarChar(100)
+  price         Decimal   @db.Decimal(10, 2)
+  quantityTotal Int       @map("quantity_total")
+  quantitySold  Int       @default(0) @map("quantity_sold")
+  quantityHeld  Int       @default(0) @map("quantity_held")
+  saleStart     DateTime? @map("sale_start") @db.Timestamptz()
+  saleEnd       DateTime? @map("sale_end") @db.Timestamptz()
+  version       Int       @default(0)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  event         Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@map("ticket_tiers")
+  @@schema("events")
+}

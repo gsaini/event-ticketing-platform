@@ -1,0 +1,272 @@
+version: '3.8'
+
+services:
+  # ── Infrastructure ─────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ticketadmin
+      POSTGRES_PASSWORD: changeme_pg_secret
+      POSTGRES_DB: event_tickets
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ticketadmin -d event_tickets"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass changeme_redis_secret
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "changeme_redis_secret", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  kafka:
+    image: apache/kafka:3.8.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "29092:29092"
+    volumes:
+      - kafkadata:/tmp/kafka-data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: changeme_minio_secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc config host add myminio http://minio:9000 minioadmin changeme_minio_secret;
+      /usr/bin/mc mb myminio/event-assets || true;
+      /usr/bin/mc anonymous set public myminio/event-assets;
+      exit 0;
+      "
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  # ── API Gateway ────────────────────────────────────────────────────────────
+  kong:
+    image: kong:3.7-ubuntu
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/declarative/kong.yml
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_DNS_RESOLVER: 127.0.0.11
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    volumes:
+      - ./gateway/kong.yml:/kong/declarative/kong.yml
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Microservices ──────────────────────────────────────────────────────────
+  user-service:
+    build:
+      context: ./services/user-service
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3001
+      DATABASE_URL: "postgresql://ticketadmin:changeme_pg_secret@postgres:5432/event_tickets?schema=users"
+      JWT_SECRET: "dev-secret-change-in-production"
+      LOG_LEVEL: "debug"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  event-service:
+    build:
+      context: ./services/event-service
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3002
+      DATABASE_URL: "postgresql://ticketadmin:changeme_pg_secret@postgres:5432/event_tickets?schema=events"
+      KAFKA_BROKERS: "kafka:9092"
+      MINIO_ENDPOINT: "minio"
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: "minioadmin"
+      MINIO_SECRET_KEY: "changeme_minio_secret"
+      MINIO_BUCKET: "event-assets"
+      JWT_SECRET: "dev-secret-change-in-production"
+      LOG_LEVEL: "debug"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  booking-service:
+    build:
+      context: ./services/booking-service
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3003
+      DATABASE_URL: "postgresql://ticketadmin:changeme_pg_secret@postgres:5432/event_tickets?schema=bookings"
+      REDIS_HOST: "redis"
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: "changeme_redis_secret"
+      KAFKA_BROKERS: "kafka:9092"
+      JWT_SECRET: "dev-secret-change-in-production"
+      LOG_LEVEL: "debug"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  payment-service:
+    build:
+      context: ./services/payment-service
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3004
+      DATABASE_URL: "postgresql://ticketadmin:changeme_pg_secret@postgres:5432/event_tickets?schema=payments"
+      KAFKA_BROKERS: "kafka:9092"
+      JWT_SECRET: "dev-secret-change-in-production"
+      LOG_LEVEL: "debug"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  search-service:
+    build:
+      context: ./services/search-service
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3005
+      ELASTICSEARCH_URL: "http://elasticsearch:9200"
+      KAFKA_BROKERS: "kafka:9092"
+      LOG_LEVEL: "debug"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3006
+      KAFKA_BROKERS: "kafka:9092"
+      SMTP_HOST: "mailhog"
+      SMTP_PORT: 1025
+      LOG_LEVEL: "debug"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+
+  cart-service:
+    build:
+      context: ./services/cart-service
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3007
+      REDIS_HOST: "redis"
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: "changeme_redis_secret"
+      JWT_SECRET: "dev-secret-change-in-production"
+      LOG_LEVEL: "debug"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  waitlist-service:
+    build:
+      context: ./services/waitlist-service
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3008
+      REDIS_HOST: "redis"
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: "changeme_redis_secret"
+      KAFKA_BROKERS: "kafka:9092"
+      JWT_SECRET: "dev-secret-change-in-production"
+      LOG_LEVEL: "debug"
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
+  kafkadata:
+  esdata:
+  miniodata:

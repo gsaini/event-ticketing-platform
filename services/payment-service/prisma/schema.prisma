@@ -1,0 +1,27 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["payments"]
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  binaryTargets   = ["native", "debian-openssl-3.0.x"]
+  previewFeatures = ["multiSchema"]
+}
+
+model Payment {
+  id               String   @id @default(uuid()) @db.Uuid
+  bookingId        String   @map("booking_id") @db.Uuid
+  provider         String   @default("stripe") @db.VarChar(20)
+  providerTxnId    String?  @unique @map("provider_txn_id") @db.VarChar(255)
+  amount           Decimal  @db.Decimal(10, 2)
+  currency         String   @default("USD") @db.VarChar(3)
+  status           String   @default("pending") @db.VarChar(20)
+  providerMetadata Json     @default("{}") @map("provider_metadata")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@map("payments")
+  @@schema("payments")
+}

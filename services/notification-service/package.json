@@ -1,0 +1,29 @@
+{
+  "name": "notification-service",
+  "version": "1.0.0",
+  "description": "Email, SMS, and push notification delivery service",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "jest --passWithNoTests"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "helmet": "^7.1.0",
+    "kafkajs": "^2.2.4",
+    "nodemailer": "^6.9.15",
+    "pino": "^9.4.0",
+    "pino-pretty": "^11.2.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.5.0",
+    "@types/nodemailer": "^6.4.16",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}
